@@ -1,83 +1,158 @@
-var readdirp = require('readdirp');
 var fs = require('fs');
 var path = require('path');
+var readdirp = require('readdirp');
+var inquirer = require('inquirer');
 
-let rootDir = "<ROOT Directory where the operation is to be performed>";
-var modifiedFileContent;
+let rootDir = "DIRECTORY_PATH"; // TODO: Replace DIRECTORY_PATH
 
-var settings = {
+var aAllFiles = [];
+var aCheckedFiles = [];
+var aCheckedHTMLNotFound = [];
+var aCheckedModifiedFiles = [];
+var aCheckedUnmodifiedFiles = [];
+var bWriteMode = false;
+
+var constants = {
+  CHECK_FILES: "Check Files for DOCTYPE",
+  CHECK_MODIFY_FILES: "Check Files for DOCTYPE & Modify them to include it"
+};
+
+inquirer.prompt([{
+  type: 'list',
+  name: 'action',
+  message: 'What do you want to perform?',
+  choices: [
+    constants.CHECK_FILES,
+    constants.CHECK_MODIFY_FILES
+  ]
+}]).then(answers => {
+  initialize(answers);
+});
+
+var initialize = function(answers) {
+  if (answers.action === constants.CHECK_MODIFY_FILES) {
+    bWriteMode = true;
+  }
+
+  var settings = { //TODO: Alter Setting if required
     root: rootDir,
-    entryType: 'all',
+    entryType: 'files',
     // Filter files with js and json extension
-    //fileFilter: [ '*.jsp' ],
+    fileFilter: ['*.jsp'],
     // Filter by directory
     //directoryFilter: [ '!.git', '!*modules' ],
     // Work with files up to 1 subdirectory deep
     //depth: 1
-};
+  };
 
-var allFilePaths = [];
+  // Read settings and recursively iterate over the directory
+  readdirp(settings)
+    .on('data', function(entry) {
+      aAllFiles.push(entry.fullPath);
+      // Async Read
+      //fnReadFile(entry.fullPath);
 
-// Iterate recursively through a folder
-readdirp(settings)
-    .on('data', function (entry) {
-        // execute everytime a file is found in the provided directory
-
-        // Store the fullPath of the file/directory in our custom array
-        allFilePaths.push(
-            entry.fullPath
-        );
-
-        fnReadFile(entry.fullPath);
+      // Sync Read
+      fnReadFileSync(entry.fullPath);
     })
-    .on('warn', function(warn){
-        console.log("Warn: ", warn);
+    .on('warn', function(warn) {
+      console.log("Warn: ", warn);
     })
-    .on('error', function(err){
-        console.log("Error: ", err);
+    .on('error', function(err) {
+      console.log("Error: ", err);
     })
-    .on('end', function(){
-        console.log(allFilePaths);
+    .on('end', function() {
+      fnPrintResult(answers);
     });
+}
 
+// Function is called for every file which matches the criterion in the setting
 var fnReadFile = function(sPath) {
-  fs.readFile(sPath, 'utf8', function (err, contents) {
-    console.log("Reading File Content of : " + sPath);
-
-    var aFileContent = contents.toString().split("\n");
+  fs.readFile(sPath, 'utf8', function(err, contents) {
+    var sModifiedFileContent;
+    var aFileContent = contents && contents.toString().split("\n");
+    // Custom Implementation Begins here
+    // TODO: Update Custom Implementation if required
 
     //logic to identify the pattern with location for HTML Tag
     var oPatternDetailsHTML = fnFindPatternWithLocation(aFileContent, "<html>");
 
-    //Get iLocation of HTML instance and search only till that point for the DOCTYPE
+    //Get link number of HTML element and search only till that point for the DOCTYPE
     var oPatternDetailsDocType = fnFindPatternWithLocation(aFileContent, "<!DOCTYPE", oPatternDetailsHTML.iLocation);
 
-    var bPatternFound = oPatternDetailsDocType.bPatternFound;
+    var bHTMLPatternFound = oPatternDetailsHTML.bPatternFound;
+    var bDocTypePatternFound = oPatternDetailsDocType.bPatternFound;
 
-    if (!bPatternFound) {
-      //Insert string at Zeroth Line
-      modifiedFileContent = fnWriteLineAtLocation(aFileContent, "<!DOCTYPE html>", 0);
-      fnWriteFile(sPath, modifiedFileContent);
+    if (bHTMLPatternFound) { // When HTML is found
+      if (bDocTypePatternFound) { // When DOCTYPE is found
+        aCheckedFiles.push(sPath);
+      } else { //When DOCTYPE is not found
+        if (bWriteMode) { // Permission to write DOCTYPE
+          sModifiedFileContent = fnWriteLineAtLocation(aFileContent, "<!DOCTYPE html>", 0); //TODO: Change the DOCTYPE Template if required
+          fnWriteFile(sPath, sModifiedFileContent);
+          aCheckedModifiedFiles.push(sPath);
+        } else { // No Permission to write DOCTYPE
+          aCheckedUnmodifiedFiles.push(sPath);
+        }
+      }
+    } else { // When HTML is not found
+        aCheckedHTMLNotFound.push(sPath);
     }
+
+    // Custom Implementation Ends here
   });
 }
 
-var fnFindPatternWithLocation = function(sContent, sPattern, iThresholdLocation) {
+// Function is called for every file which matches the criterion in the setting
+var fnReadFileSync = function(sPath) {
+  var sModifiedFileContent;
+  var contents = fs.readFileSync(sPath, 'utf8');
+
+  var aFileContent = contents && contents.toString().split("\n");
+
+  // Custom Implementation Begins here
+  // TODO: Update Custom Implementation if required
+
+  //logic to identify the pattern with location for HTML Tag
+  var oPatternDetailsHTML = fnFindPatternWithLocation(aFileContent, "<html>");
+
+  //Get link number of HTML element and search only till that point for the DOCTYPE
+  var oPatternDetailsDocType = fnFindPatternWithLocation(aFileContent, "<!DOCTYPE", oPatternDetailsHTML.iLocation);
+
+  var bHTMLPatternFound = oPatternDetailsHTML.bPatternFound;
+  var bDocTypePatternFound = oPatternDetailsDocType.bPatternFound;
+
+  if (bHTMLPatternFound) { // When HTML is found
+    if (bDocTypePatternFound) { // When DOCTYPE is found
+      aCheckedFiles.push(sPath);
+    } else { //When DOCTYPE is not found
+      if (bWriteMode) { // Permission to write DOCTYPE
+        sModifiedFileContent = fnWriteLineAtLocation(aFileContent, "<!DOCTYPE html>", 0); //TODO: Change the DOCTYPE Template if required
+        fnWriteFile(sPath, sModifiedFileContent);
+        aCheckedModifiedFiles.push(sPath);
+      } else { // No Permission to write DOCTYPE
+        aCheckedUnmodifiedFiles.push(sPath);
+      }
+    }
+  } else { // When HTML is not found
+      aCheckedHTMLNotFound.push(sPath);
+  }
+
+  // Custom Implementation Ends here
+}
+
+var fnFindPatternWithLocation = function(aContent, sPattern, iThresholdLocation) {
   var bPatternFound = false;
   var bFoundIndex = -1;
   var regex = RegExp(sPattern + '*');
-  var iThresholdLocation = iThresholdLocation || sContent.length;
-
-  console.log("Looking for : " + sPattern);
-  for (index in sContent) {
+  var iThresholdLocation = iThresholdLocation || aContent.length;
+  for (index in aContent) {
+    // Condition to break when the threshold is met
     if (index >= iThresholdLocation) {
-      console.log("Threshold Met :" + iThresholdLocation);
       break;
     }
 
-    var line = sContent[index];
-    if(regex.test(line)) {
-      console.log("Pattern Found " + line);
+    if (regex.test(aContent[index])) {
       bPatternFound = true;
       bFoundIndex = index;
       break;
@@ -87,24 +162,55 @@ var fnFindPatternWithLocation = function(sContent, sPattern, iThresholdLocation)
   }
 
   return {
-    bPatternFound : bPatternFound,
-    iLocation : bFoundIndex
-    };
+    bPatternFound: bPatternFound, // true/false
+    iLocation: bFoundIndex // line number of the found element or -1 if not found
+  };
 }
+
 
 var fnWriteLineAtLocation = function(aFileContent, sTextToAdd, iLocation) {
-  //Writing Text to File..
-  aFileContent.splice(iLocation, 0, sTextToAdd);
-  modifiedFileContent = aFileContent.join("\n");
-  return modifiedFileContent;
+  var sModifiedFileContent;
+  aFileContent && aFileContent.splice(iLocation, 0, sTextToAdd);
+  sModifiedFileContent = aFileContent.join("\n");
+  return sModifiedFileContent;
 }
 
-var fnWriteFile = function(sPath, sContent) {
-  //Writing Modified File Content..
-  fs.writeFile(sPath, sContent, function(err) {
-      if(err) {
-          return console.log(err);
-      }
-      console.log("Saving File Content");
+var fnWriteFile = function(sPath, sModifiedFileContent) {
+  fs.writeFile(sPath, sModifiedFileContent, function(err) {
+    if (err) {
+      return console.log(err);
+    }
   });
+}
+
+var fnPrintResult = function(answers) {
+  console.log("\nAll Files : " + aAllFiles.length);
+  console.log("\nPrint Results");
+  if (aCheckedFiles && aCheckedFiles.length > 0) {
+    console.log("\nFiles Checked & Found Good: " + aCheckedFiles.length);
+  }
+
+  if (answers.action === constants.CHECK_FILES) {
+    if (aCheckedUnmodifiedFiles && aCheckedUnmodifiedFiles.length > 0) {
+      console.log("\nFiles Checked & Missing DOCTYPE : " + aCheckedUnmodifiedFiles.length);
+      console.log(aCheckedUnmodifiedFiles);
+    }
+  } else if (answers.action === constants.CHECK_MODIFY_FILES) {
+    if (aCheckedUnmodifiedFiles && aCheckedUnmodifiedFiles.length > 0) {
+      console.log("\nFiles Checked & Missing DOCTYPE : " + aCheckedUnmodifiedFiles.length);
+      console.log(aCheckedUnmodifiedFiles);
+    }
+
+    if (aCheckedModifiedFiles && aCheckedModifiedFiles.length > 0) {
+      console.log("\nFiles Checked & Added DOCTYPE : " + aCheckedModifiedFiles.length);
+      console.log(aCheckedModifiedFiles);
+    } else {
+      console.log("\nNo Files Found to Modify!");
+    }
+  }
+
+  console.log("\nFiles Checked : " + aAllFiles.length);
+  console.log("Files Checked & Missing DOCTYPE : " + aCheckedUnmodifiedFiles.length);
+  console.log("Files Checked & Added DOCTYPE : " + aCheckedModifiedFiles.length);
+  console.log("Files Checked & Missing HTML : " + aCheckedHTMLNotFound.length);
 }

@@ -19,5 +19,11 @@
   "bugs": {
     "url": "https://github.com/Natesan/code-editor/issues"
   },
-  "homepage": "https://github.com/Natesan/code-editor#readme"
+  "homepage": "https://github.com/Natesan/code-editor#readme",
+  "devDependencies": {
+    "fs": "0.0.1-security",
+    "inquirer": "^6.0.0",
+    "path": "^0.12.7",
+    "readdirp": "^2.1.0"
+  }
 }
