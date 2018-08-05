@@ -11,3 +11,5 @@ Implementation Details:
 - User is provided with two options to either check the presence of the DOCTYPE for valid HTML pages or check the presence and introduce one when not available
 - Reports the stats at the end of the process
 - Provides two different implementation for asyncronous and syncronous file reads
+
+Will be coming up with a generic version of this app and isolate the custom implementation soon.
