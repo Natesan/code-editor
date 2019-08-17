@@ -184,8 +184,8 @@ var fnWriteFile = function(sPath, sModifiedFileContent) {
 }
 
 var fnPrintResult = function(answers) {
-  console.log("\nAll Files : " + aAllFiles.length);
-  console.log("\nPrint Results");
+  console.log("\nTotal Number of Files Read : " + aAllFiles.length);
+  console.log("\nPrinting Results");
   if (aCheckedFiles && aCheckedFiles.length > 0) {
     console.log("\nFiles Checked & Found Good: " + aCheckedFiles.length);
   }
